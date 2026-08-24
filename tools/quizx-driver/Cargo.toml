@@ -1,0 +1,10 @@
+[package]
+name = "quizx-driver"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+quizx = { path = "../quizx/quizx" }
+
+[profile.release]
+opt-level = 3

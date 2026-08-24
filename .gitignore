@@ -1,0 +1,6 @@
+vendor/
+target/
+__pycache__/
+*.pyc
+.DS_Store
+research/benchmarks/qasm/
