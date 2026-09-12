@@ -1,8 +1,11 @@
 # The Rank Price
 ### the interference dimension of Clifford+T circuits
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22724895.svg)](https://doi.org/10.5281/zenodo.22724895)
+
 Companion code for the paper *The Rank Price: the interference dimension of
-Clifford+T circuits* (Priyanshu Kumar, 2026). Exact simulation of a Clifford+T
+Clifford+T circuits* (Priyanshu Kumar, 2026),
+DOI [10.5281/zenodo.22724895](https://doi.org/10.5281/zenodo.22724895). Exact simulation of a Clifford+T
 phase polynomial costs `poly * 2^rank`, not `2^count`: representations
 modulo Clifford form a coset of the punctured Reed-Muller code RM(h-4,h)*;
 the literature decodes it for weight (T-count, NP-hard), this work decodes
