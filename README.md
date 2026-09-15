@@ -9,7 +9,7 @@ DOI [10.5281/zenodo.22724895](https://doi.org/10.5281/zenodo.22724895). Exact si
 phase polynomial costs `poly * 2^rank`, not `2^count`: representations
 modulo Clifford form a coset of the punctured Reed-Muller code RM(h-4,h)*;
 the literature decodes it for weight (T-count, NP-hard), this work decodes
-it for rank — which turns out to be polynomial-time.
+it for rank, which turns out to be polynomial-time.
 
 Results backed by this repository:
 
@@ -52,7 +52,7 @@ vendor/quizx`, build `tools/quizx-driver` against it, and feed it the QASM
 from `python3 research/emit_qasm.py`.
 
 Historical note: `research/rank_price.py` retains, clearly marked, an early
-wrong characterization of delta* (period groups) and why it fails — kept
+wrong characterization of delta* (period groups) and why it fails, kept
 because the failure is instructive.
 
 ## License
