@@ -1,0 +1,647 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=1.15in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem*{scope}{Remark (scope)}
+
+\newcommand{\F}{\mathbb{F}_2}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\RM}{\mathrm{RM}}
+\newcommand{\spn}{\operatorname{span}}
+\newcommand{\supp}{\operatorname{supp}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\ev}{\operatorname{ev}}
+\newcommand{\ml}{\operatorname{ml}}
+\newcommand{\Ann}{\operatorname{Ann}}
+\newcommand{\ds}{\delta^{*}}
+\newcommand{\ts}{t^{*}}
+\newcommand{\Ch}{\mathcal{C}_h}
+\newcommand{\ip}[2]{\langle #1,#2\rangle}
+\newcommand{\Mbil}{M_{\mathrm{bil}}}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{\textbf{The Rank Price:}\\[2pt]\large the interference dimension of Clifford+$T$ circuits}
+\hypersetup{pdftitle={The Rank Price: the interference dimension of Clifford+T circuits},pdfauthor={Priyanshu Kumar}}
+\author{Priyanshu Kumar}
+\date{August 2026\\[2pt]\small Version 2, revised November 2026 (changes listed in Appendix~\ref{app:changes})}
+
+\sloppy
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Representations of a Clifford+$T$ phase polynomial modulo Clifford operations form a
+coset of the punctured Reed--Muller code $\RM(h-4,h)^{*}$. The optimization literature decodes
+this coset for \emph{weight}: the number of odd-coefficient parities is the $T$-count, and its exact
+minimization is NP-hard. We decode the same coset for \emph{rank}: the $\F$-dimension $\ds$ of the
+span of the odd-parity support, minimized over the coset, which we call the \emph{interference
+dimension}, because exact path-sum simulation costs at most $\mathrm{poly}\cdot 2^{\ds}$ rather than
+$2^{\mathrm{count}}$. We prove
+that the subspaces supporting some coset element form an intersection-closed family, so
+a unique minimal \emph{core} subspace $V_0$ exists with $\ds=\dim V_0$; that the Clifford-equivalence
+class is computed by a syndrome map into the shortened code $\RM(3,h)$; and that $\ds$ equals
+the $\F$-rank of an explicit $h\times O(h^2)$ matrix read off the phase polynomial: polynomial time, in sharp
+contrast with the NP-hardness of the weight objective. For the standard $\mathrm{GF}(2^k)$ multiplier
+benchmarks the invariant is a convolution tensor and $\ds=4k-1$ exactly; combined with the
+hierarchy $\log_2(\ts+1)\le\ds\le\ts$ this yields a linear lower bound on multiplier $T$-count in the
+coset model, which meets bilinear-complexity upper bounds at $\ts=\Theta(k)$. A counting argument
+gives families on which the rank price beats the optimal weight price superpolynomially. We
+validate every theorem by machine (exhaustive small-case checks, 142/142 agreement with
+brute-force coset scans) and benchmark against the \code{feynman} suite and the \code{quizx} stabilizer
+decomposer, with both engines agreeing on every exact amplitude. Optimal $T$-count is
+NP-hard; the interference dimension of a phase polynomial is a matrix rank. The invariant is defined
+for a fixed set of path variables; it is an upper bound on simulation cost, not an operator invariant.
+\end{abstract}
+
+\section{Introduction}
+
+Classical simulation of Clifford+$T$ circuits is priced, throughout the literature, by \emph{counts}:
+the number $t$ of $T$ gates governs stabilizer-rank methods at $2^{\alpha t}$ with $\alpha\le 0.3963$
+\cite{BG16,QPG21,KvdW22,KvdWV22}, and a long line of compilers minimizes $t$ itself
+\cite{AM19,HC19,Van24,dBBW20}. Amy and Mosca identified the structure underneath: representations of
+a $\{\mathrm{CNOT},T\}$ phase polynomial that implement the same unitary differ by codewords of the
+punctured Reed--Muller code $\RM(n-4,n)^{*}$, and $T$-count minimization is minimum-\emph{weight}
+decoding of this coset \cite{AM19}; exact weight decoding is NP-hard \cite{vdWA23}.
+
+This paper starts from an observation about what a path-sum simulator pays. A
+simulator that eliminates the Clifford part in polynomial time \cite{Amy19} and enumerates the
+residual interference coordinates pays $2^{\rho}$ where $\rho$ is the \emph{rank} of the odd-parity support (the
+dimension of the $\F$-span of the parities carrying odd coefficients), not their number. Two
+representations in the same coset can have very different ranks, so the natural objective is
+\[
+  \ds \;=\; \min_{c'\,\in\, c+\RM(h-4,h)^{*}} \dim\, \F\text{-}\spn\bigl(\supp c'\bigr),
+\]
+the \emph{interference dimension}. To our knowledge (Section~\ref{sec:related}) this objective has not previously
+been formulated: the compiler literature minimizes weight only, and the closest simulation-cost
+parameters of this shape are properties of a particular circuit trace rather than invariants of
+the Clifford coset \cite{LC26,CL26a}.
+
+\paragraph{Contributions.}
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Structure} (Section~\ref{sec:core}). The Clifford-equivalence class of a phase polynomial is computed
+by a \emph{syndrome map} $\Phi$ into the space of no-constant cubics, which is exactly the shortening
+of $\RM(3,h)$ at $0$, dual to $\RM(h-4,h)^{*}$ (Lemmas~\ref{lem:syndrome}--\ref{lem:dual}). The vectors $Q(m)$ on $\le 3$-fold
+combinations of independent vectors are linearly independent (Theorem~\ref{thm:indep}), $\ge 4$-fold
+combinations reduce by a one-line degree argument that re-derives the spider-nest
+identity of \cite{dBBW20} (Lemma~\ref{lem:reduce}), and consequently $W_{V_1}\cap W_{V_2}=W_{V_1\cap V_2}$ (Theorem~\ref{thm:intersect}):
+the family of supporting subspaces is intersection-closed, a unique minimal \emph{core} $V_0$ exists,
+and $\ds=\dim V_0$ (Corollary~\ref{cor:core}).
+\item \textbf{Algorithm} (Section~\ref{sec:alg}). $V_0^{\perp}$ is the left kernel of an explicit $h\times(1+h+\binom h2)$ matrix $M_P$
+over $\F$ built from the coefficients of the cubic invariant, and $\ds=\rank M_P$, in $O(h^4)$
+arithmetic and fully constructively (Theorem~\ref{thm:poly}). The weight objective on the same coset
+is NP-hard \cite{vdWA23}; the rank objective is a matrix rank.
+\item \textbf{The $4k-1$ law} (Section~\ref{sec:gf}). For the standard $\mathrm{GF}(2^k)$ Mastrovito multiplier circuits the
+cubic invariant is the convolution tensor $\sum_{i,j}x_iy_jz_{i+j}$ and $\ds=4k-1$ exactly (Theorem~\ref{thm:gf}).
+With the hierarchy $\log_2(\ts+1)\le\ds\le\ts$ (Proposition~\ref{prop:hier}) this gives a \emph{linear
+lower bound} $\ts\ge 4k-1$ on multiplier $T$-count in the coset model; bilinear-complexity
+decompositions are legal coset moves, so $\ts\le 7\,\Mbil(k)=O(k)$ and $\ts(\text{multiplier})=\Theta(k)$:
+a bridge between $T$-count optimization and the bilinear complexity of multiplication.
+\item \textbf{Separation and practice} (Sections~\ref{sec:sep}--\ref{sec:bench}). A counting argument shows generic dense
+cores on $d$ variables have $\ds=d$ but $\ts=\Theta(d^2)$, so the rank price $2^{\ds}=2^{\Theta(\sqrt{\ts})}$ beats
+the optimal weight price $2^{0.396\ts}$ superpolynomially. On the \code{feynman} benchmark suite
+the rank price beats the generic weight bar on 33/40 circuits, and coset minimization lowers
+$\ds$ strictly below the raw parity rank on 26/40. An exact $\Z[\omega_8]$ implementation,
+cross-validated amplitude-by-amplitude against the \code{quizx} cat-state decomposer
+on a counting task with a closed-form answer, exhibits a provably flat $16\times$ cost ratio per
+$k$ against an empirically accelerating $27/52/65\times$ for the $T$-count-driven method.
+\end{enumerate}
+
+All proofs are elementary ($\F$ linear algebra plus classical facts about Reed--Muller codes),
+and every step is machine-verified (Appendix~\ref{app:manifest}).
+
+\section{Preliminaries}
+
+Throughout $h\ge 4$; $\F$ is the two-element field; $\omega=e^{i\pi/4}$. For a nonzero mask $m\in\F^h$ and $z\in\F^h$ write
+$\ip mz=\bigoplus_{i\in\supp m}z_i$. A \emph{phase function} on $h$ path variables is
+\[
+  f(z)\;=\;\sum_S a_S\,\ip Sz \bmod 8,\qquad a_S\in\Z_8,
+\]
+acting as the diagonal phase $\omega^{f(z)}$ in a sum-over-paths \cite{DHH05,Amy19}. Each odd-coefficient
+parity costs one $T$ gate; Clifford diagonal adjustments are exactly the even-coefficient modifications.
+The \emph{odd pattern} $c(f)\subseteq\F^h\setminus\{0\}$ is the set of parities with odd coefficient, identified
+with a vector in $\F^{2^h-1}$ indexed by nonzero points.
+
+$\Ch$ denotes the space of polynomials over $\F$ of degree $\le 3$ with zero constant term; $f(h):=
+\dim\Ch=h+\binom h2+\binom h3$. For a nonzero mask $m$,
+\[
+  Q(m)\;:=\;e_1(\supp m)+e_2(\supp m)+e_3(\supp m)\;\in\;\Ch,
+\]
+the elementary symmetric sums of degree $\le 3$ on the support, and the \emph{grading map} is $\Phi(c):=
+\sum_{y\in c}Q(y)$. The map $Q$ arises from the integer expansion $x_1\oplus\cdots\oplus x_j=\sum x_i-2\sum_{i<i'}x_ix_{i'}+
+4\sum x_ix_{i'}x_{i''}-\cdots$, whose coefficients of degree $\ge 4$ vanish modulo $8$: reducing the three grades
+modulo $2$ ($a_S$ mod $2$; pair coefficients divided by $2$; triple coefficients divided by $4$) shows that
+$f$ modulo Clifford is exactly a cubic in $\Ch$, and a parity maps to $Q$ of its support. (Verified
+exhaustively at $h=3$: the $8^7$ coefficient vectors reach exactly $8^3\cdot4^3\cdot2$ distinct functions and
+the kernel is constant on the grading.)
+
+$\RM(r,m)$ is the Reed--Muller code of evaluations of degree-$\le r$ polynomials on $\F^m$;
+$\dim\RM(r,m)=\sum_{i\le r}\binom mi$, minimum distance $2^{m-r}$, and $\RM(r,m)^{\perp}=\RM(m-r-1,m)$
+\cite{MS77}. The superscript ${}^{*}$ denotes puncturing at the point $0$.
+
+Two representations on the same $h$ path variables induce the same phase function up to Clifford
+phases iff their coefficient vectors differ by a relation; Amy--Mosca proved the mod-$2$ residues of
+relations form $\RM(h-4,h)^{*}$ \cite{AM19}. Our development re-derives this self-containedly
+(Lemma~\ref{lem:dual}); we also note that the naive $0/1$ lift of a codeword is \emph{not} itself a relation
+for $h\ge5$: an exact lift requires a triangular even-part correction (fix pair grades with $S$-type
+coefficients, then linear grades), which we verify constructively for $h\le6$.
+
+The two decoding problems on the coset $c+\RM(h-4,h)^{*}$ are
+\begin{align*}
+  \ts(c)&=\min_{c'}|c'| &&\text{(weight; the $T$-count \cite{AM19}, NP-hard \cite{vdWA23})},\\
+  \ds(c)&=\min_{c'}\dim\F\text{-}\spn(\supp c') &&\text{(rank; this paper)}.
+\end{align*}
+
+\begin{definition}\label{def:W}
+$W_V:=\spn_{\F}\{Q(m):m\in V\setminus\{0\}\}\subseteq\Ch$ for a subspace $V\le\F^h$.
+\end{definition}
+
+\begin{theorem}[Simulation pays at most rank]\label{thm:sim}
+Given a representation whose odd parities span a $\rho$-dimensional space, a computational-basis
+path-sum amplitude is computable exactly in $\mathrm{poly}(h)\cdot2^{\rho}$ arithmetic operations in $\Z[\omega]$:
+rotate the span to the first $\rho$ coordinates, enumerate them,
+and evaluate the remaining all-even (Clifford) phase by the standard non-branching quadratic
+Gauss-sum elimination \cite{Amy19}. Hence $\mathrm{poly}(h)\cdot2^{\ds}$ operations suffice for any
+representation in the coset, after the polynomial-time preprocessing of Corollary~\ref{cor:rep}.
+\end{theorem}
+
+\begin{proof}
+Apply a $GL(h,\F)$ change of variables mapping the odd span to the leading $\rho$ coordinates. Every
+parity involving a trailing coordinate then has even coefficient. Fix the leading coordinates. A term
+$2\,\ip Sz$ equals $2\sum_{i\in S}z_i-4\sum_{i<i'}z_iz_{i'}$ modulo $8$, and a term $4\,\ip Sz$ equals $4\sum_{i\in S}z_i$,
+so the remaining phase is $\omega^{2q(z)}=i^{q(z)}$ for a $\Z_4$-valued quadratic form $q$ in the trailing variables,
+with coefficients depending on the fixed leading values. Summing $i^{q}$ over one trailing variable either
+yields a scalar in $\{2,1\pm i\}$ times $i^{q'}$ for a quadratic form $q'$ in the remaining variables, or imposes one
+affine constraint that is solved by substitution; neither case branches. Each of the $2^{\rho}$ leading assignments therefore costs
+$\mathrm{poly}(h)$. Our implementation validates exact equality with brute force (Appendix~\ref{app:manifest}).
+\end{proof}
+
+\begin{scope}
+$\ds$ is an invariant of the phase polynomial under Clifford coset moves on a \emph{fixed} set of $h$ path
+variables. Path-sum rewrites that change $h$, such as the Hadamard rule
+$\sum_y(-1)^{y(u+v)}=2[u=v]$ and nonlinear substitution \cite{Amy19}, lie outside the model, so $\ds$
+is not an invariant of the operator. Two circuits for the identity show this: $T\,H\,H\,T^{\dagger}$ has
+$3$ path variables and $\ds=2$, and $\mathrm{Toffoli}\cdot\mathrm{Toffoli}$ (with $\mathrm{Toffoli}=H\cdot\mathrm{CCZ}\cdot H$) has $7$ path
+variables and $\ds=3$, while the operator has cost $1$. Theorem~\ref{thm:sim} is thus an upper bound; we prove no lower bound on
+simulation cost in terms of $\ds$.
+\end{scope}
+
+\begin{proposition}[Hierarchy]\label{prop:hier}
+$\log_2(\ts+1)\le\ds\le\ts$, and both ends are achieved.
+\end{proposition}
+
+\begin{proof}
+Right: a minimum-weight element spans at most $\ts$ dimensions; a single $T$ gate has $\ts=\ds=1$.
+Left: a rank-$\ds$ element lives on $\ds$ dimensions, where at most $2^{\ds}-1$ parities exist, so some
+representation has $\ts\le2^{\ds}-1$ odd parities. The CCZ pattern achieves equality: its seven parities
+fill a $3$-dimensional space, so $\ds=3$, and $\ts=7=2^3-1$ because every nonzero codeword of
+$\RM(h-4,h)^{*}$ has weight at least $15$, so every other coset element has weight at least $15-7=8$.
+(Selinger's $4$-$T$ gate \cite{Sel13} is $\mathrm{CCZ}\cdot\mathrm{CS}^{\dagger}$: its syndrome is $xyz+xy$, a different coset.)
+Generic dense cores (Section~\ref{sec:sep}) have $\ts=\Theta((\ds)^{2})$.
+\end{proof}
+
+\section{The syndrome map and the canonical core}\label{sec:core}
+
+\begin{lemma}[$\Phi$ is a syndrome map]\label{lem:syndrome}
+For $1\le|T|\le3$, the coefficient of $x^T$ in $\Phi(c)$ equals
+$\#\{y\in c:\supp y\supseteq T\}\bmod2=\ip{c}{\ev(x^T)}$, where $\ev(g)=(g(y))_{y\ne0}$. Hence $\Phi(c)=0$ iff
+$c\perp\ev(\Ch)$.
+\end{lemma}
+\begin{proof}
+$e_d(\supp y)$ contains $x^T$ iff $T\subseteq\supp y$; and $x^T(y)=[T\subseteq\supp y]$. Sum over $y\in c$.
+\end{proof}
+
+\begin{lemma}[Exact dual pair]\label{lem:dual}
+$\ev(\Ch)$ is the shortening of $\RM(3,h)$ at $0$, of dimension $f(h)$,
+and $\{c:\Phi(c)=0\}=\RM(h-4,h)^{*}$.
+\end{lemma}
+\begin{proof}
+Orthogonality: for $\deg p\le h-4$ and $g\in\Ch$, $\deg(pg)\le h-1$ and the only multilinear
+monomial with odd sum over $\F^h$ is $x_1\cdots x_h$, so $\sum_{y\ne0}p(y)g(y)=\sum_y(pg)(y)-p(0)g(0)=0$.
+Injectivity of $\ev$ on $\Ch$: a nonzero multilinear polynomial vanishing at all $y\ne0$ is a multiple
+of the point indicator $\delta_0$, of degree $h>3$. Dimensions: $\dim\RM(h-4,h)^{*}=2^h-1-f(h)$
+(puncturing preserves dimension since $d_{\min}=16>1$), and the two dimensions sum to the
+length $2^h-1$; exact annihilators. Lemma~\ref{lem:syndrome} identifies the kernel of $\Phi$ with the annihilator of
+$\ev(\Ch)$.
+\end{proof}
+
+Thus $\Phi(c)=\Phi(c')$ iff $c+c'\in\RM(h-4,h)^{*}$: Clifford classes are cosets, and $\Phi$ computes
+the syndrome. Weight decoding of this coset is Amy--Mosca; rank decoding is what follows.
+
+\begin{theorem}[Independence]\label{thm:indep}
+Let $e_1,\dots,e_n\in\F^h$ be linearly independent and, for $S\subseteq[n]$ with
+$1\le|S|\le3$, put $m_S:=\bigoplus_{i\in S}e_i$. Then $\{Q(m_S)\}_S$ is linearly independent in $\Ch$.
+\end{theorem}
+\begin{proof}
+Suppose $\sum_{S\in F}Q(m_S)=0$ with $F\ne\emptyset$. The $m_S$ are distinct and nonzero, so $c_F=
+\{m_S:S\in F\}$ is a pattern with $\Phi(c_F)=0$; by Lemma~\ref{lem:syndrome}, $c_F\perp\ev(\Ch)$. Choose dual functionals
+$\lambda_j$ with $\lambda_j\cdot e_i=\delta_{ij}$ and set $g_T:=\prod_{j\in T}(\lambda_j\cdot x)\in\Ch$ for $1\le|T|\le3$; then $g_T(m_S)=[T\subseteq S]$.
+Let $S_0\in F$ have maximal cardinality: $\ip{c_F}{\ev(g_{S_0})}=\#\{S\in F:S\supseteq S_0\}=1$, contradicting
+orthogonality.
+\end{proof}
+
+\begin{lemma}[Reduction of $\ge4$-fold combinations]\label{lem:reduce}
+$W_V$ is spanned by the $Q(m_S)$ with $|S|\le3$,
+for any basis of $V$.
+\end{lemma}
+\begin{proof}
+For $|S|=k\ge4$ pick distinct $a,b,c\in S$ and set $u_1=\bigoplus_{i\in S\setminus\{a,b,c\}}e_i$, $u_2=e_a$, $u_3=
+e_b$, $u_4=e_c$: four independent vectors spanning $W$. Any $g\in\Ch$ pulls back to a degree-$\le3$
+polynomial on $\F^4$, whose sum over $\F^4$ vanishes; so $\sum_{y\in W\setminus0}g(y)=-g(0)=0$ and, by
+Lemma~\ref{lem:syndrome}, $\Phi$ of the $15$-pattern of $W$ is zero. This rewrites $Q(m_S)$ as the sum of $Q$ over the
+other $14$ combinations; every combination containing $u_1$ is a combination of at most $k-1$ of
+the $e_i$, and every combination without $u_1$ is a $\le3$-fold; induct. (This one-line degree argument
+recovers the cubic-level content of the spider-nest identities \cite{dBBW20}.)
+\end{proof}
+
+\begin{corollary}\label{cor:dim}
+$\dim W_V=f(\dim V)$, with basis $\{Q(m_S):1\le|S|\le3\}$.
+\end{corollary}
+
+\begin{theorem}[Intersection lemma]\label{thm:intersect}
+$W_{V_1}\cap W_{V_2}=W_{V_1\cap V_2}$ for all subspaces $V_1,V_2\le\F^h$.
+\end{theorem}
+\begin{proof}
+$\supseteq$ is clear. Take an adapted basis: $c_1,\dots,c_r$ of $V_1\cap V_2$, extended by $a_1,\dots,a_p$ to
+$V_1$ and by $b_1,\dots,b_q$ to $V_2$; the union is independent. By Corollary~\ref{cor:dim} the generators of $W_{V_1}$
+and $W_{V_2}$ are subfamilies of $\{Q(m_S)\}$ over the union basis, independent by Theorem~\ref{thm:indep}; the
+families overlap in exactly the $f(r)$ generators indexed by subsets of the $c$-indices. Hence
+$\dim(W_{V_1}+W_{V_2})=f(r+p)+f(r+q)-f(r)$ and $\dim(W_{V_1}\cap W_{V_2})=f(r)=\dim W_{V_1\cap V_2}$.
+\end{proof}
+
+\begin{corollary}[Canonical core]\label{cor:core}
+Let $\mathcal V(c)$ be the set of subspaces $V$ such that the coset $c+\RM(h-4,h)^{*}$ contains a
+pattern supported in $V$. Then
+$V\in\mathcal V(c)$ iff $\Phi(c)\in W_V$; the family is closed under intersection; it has a unique minimal
+element $V_0(c)$; and $\ds(c)=\dim V_0(c)$, with
+$\{w:\text{some coset element avoids direction }w\}=V_0(c)^{\perp}$.
+\end{corollary}
+
+\section{The interference dimension is a matrix rank}\label{sec:alg}
+
+\begin{lemma}[Annihilator of $W_V$]\label{lem:ann}
+Identify a functional $\varphi$ on $\Ch$ with the polynomial $\hat\varphi(x)=
+\sum_T\varphi_Tx^T$. Then $\varphi(Q(m))=\hat\varphi(m)$, and $\Ann(W_V)=\{\varphi:\hat\varphi|_V=0\}$ exactly (restriction of
+no-constant cubics to $V$ is surjective, and dimensions match).
+\end{lemma}
+
+\begin{lemma}[Hyperplane cubics]\label{lem:hyper}
+For $w\ne0$, the no-constant cubics vanishing on $w^{\perp}$ are
+exactly $\{\ml(\ell_w\cdot q):\deg q\le2\}$, where $\ell_w(x)=w\cdot x$ and $\ml$ denotes multilinear reduction.
+\end{lemma}
+\begin{proof}
+Inclusion is clear. The kernel of $q\mapsto\ml(\ell_wq)$ consists of the degree-$\le2$ polynomials
+vanishing on the affine hyperplane $\{\ell_w=1\}$ and has dimension $h$, so the image has dimension
+$1+h+\binom h2-h=1+(h-1)+\binom{h-1}2$, which equals the dimension of the target space; the
+inclusion is an equality.
+\end{proof}
+
+\begin{theorem}[Polynomial-time rank price]\label{thm:poly}
+Define $M_P\in\F^{h\times(1+h+\binom h2)}$ with rows $i\in[h]$,
+columns $q\in\{1\}\cup\{x_j\}\cup\{x_jx_k\}_{j<k}$, and entry the coefficient in $P=\Phi(c)$ of $\ml(x_i\cdot q)$:
+\[
+  M_P[i,1]=P_{x_i},\qquad
+  M_P[i,x_j]=\begin{cases}P_{x_i}&j=i\\P_{x_ix_j}&j\ne i\end{cases},\qquad
+  M_P[i,x_jx_k]=\begin{cases}P_{x_ix_k}&i=j\\P_{x_ix_j}&i=k\\P_{x_ix_jx_k}&\text{else.}\end{cases}
+\]
+Then $V_0^{\perp}$ is the left kernel of $M_P$ and $\ds=\rank_{\F}M_P$, computable in $O(h^4)$ arithmetic from
+the phase polynomial.
+\end{theorem}
+\begin{proof}
+$w\in V_0^{\perp}$ iff $\Phi(c)\in W_{w^{\perp}}$ (Corollary~\ref{cor:core}) iff $\varphi(P)=0$ for every functional with $\hat\varphi|_{w^{\perp}}=0$
+(Lemma~\ref{lem:ann}) iff $\sum_T[\ml(\ell_wq)]_TP_T=0$ for all $\deg q\le2$ (Lemma~\ref{lem:hyper}). The expression is linear in
+$w$ for fixed $q$, so the condition over the $q$-basis is $wM_P=0$; rank--nullity finishes.
+\end{proof}
+
+\begin{corollary}[Constructive representative]\label{cor:rep}
+From $\ker M_P$ compute $V_0$, express $P$ in the basis
+of Corollary~\ref{cor:dim} for $W_{V_0}$ (a linear solve of size $f(\ds)$), and obtain an equivalent representation
+on at most $f(\ds)=O\bigl((\ds)^3\bigr)$ parities inside $V_0$; the full $\mathrm{poly}\cdot2^{\ds}$ pipeline of Theorem~\ref{thm:sim} is thus
+polynomial-time preprocessed.
+\end{corollary}
+
+Two structural remarks. First, the top-degree block of $M_P$ alone is the classical trilinear
+flattening whose kernel gives the ``effective dimension'' of a cubic form modulo $\RM(2,m)$ (Brier--Langevin
+\cite{BL03,KGP26a}); the collapse rules routing pair and linear grades into the reserved
+slots are exactly what lifts this classical invariant to the full $\Z_8$ Clifford quotient. Second,
+the naive approaches fail instructively: every XOR-shift derivative of a parity-phase function
+is Clifford (a shift flips coefficients $a\mapsto-a$, an even change), so period-group methods see
+nothing; and the $GL$ action on the quotient is \emph{twisted} ($z_a\mapsto z_a\oplus z_b\oplus z_c$ sends a singleton parity
+to an XOR parity, which gains cubic terms), so essential-variable algorithms for polynomials
+under substitution \cite{Car06,Kay11,Mon17} do not apply.
+
+\section{The $4k-1$ law for field multipliers}\label{sec:gf}
+
+The \code{feynman} benchmark suite realizes $\mathrm{GF}(2^k)$ multiplication in Mastrovito form: $k^2$ partial
+products $a_ib_j$, each a CCZ between two input wires and a Hadamard-opened product wire,
+grouped by total degree $m=i+j$ into $2k-1$ classes, with modular reduction by CNOTs
+between closed Hadamard blocks. We verified these structural premises mechanically for every
+benchmark file ($k\le16$; measurements consistent through $k=256$).
+
+\begin{theorem}[The $4k-1$ law]\label{thm:gf}
+For these circuits, $\ds=\rho=4k-1$.
+\end{theorem}
+\begin{proof}
+The image of one CCZ in the Clifford quotient is the single monomial $xyz$ (the function
+$\pm4xyz$ mod $8$ has zero linear and pair grades; $\mathrm{CCZ}^{\dagger}$ is identical mod $8$). Hence
+\[
+  P\;=\;T\;:=\;\sum_{i,j\in[0,k)}x_iy_jz_{i+j},
+\]
+the convolution tensor, supported on $U=\spn\{x_i\}\oplus\{y_j\}\oplus\{z_m\}$ with $\dim U=4k-1$. Upper
+bound: the pattern is its own coset element, so $V_0\subseteq\spn(\supp c)\subseteq U$. Lower bound: by
+Theorem~\ref{thm:poly}, $u=(\alpha,\beta,\gamma)\in V_0^{\perp}$ requires every contraction $D(u)_{JK}=\sum_Iu_IT_{IJK}$ to vanish.
+Taking $\{J,K\}=\{x_i,y_j\}$ gives $\gamma_{i+j}=0$ for all $i,j$, so $\gamma=0$ (every $m\in[0,2k-2]$ is a sum);
+$\{x_i,z_m\}$ gives $\beta_{m-i}=0$, so $\beta=0$; symmetrically $\alpha=0$. Hence $V_0=U$.
+\end{proof}
+
+\begin{corollary}\label{cor:gf}
+\textup{(a)} $\rho=\ds$: no Clifford/null-identity optimization compresses a Mastrovito
+multiplier below its raw parity span (matching $12/12$ exact benchmark measurements, $k=4$
+through $256$). \textup{(b)} $\ts\ge\ds=4k-1$: a linear lower bound on multiplier $T$-count in the coset
+model. \textup{(c)} Since a bilinear algorithm with $R$ products of linear forms rewrites the invariant
+as $R$ rank-one trilinear terms on parities of the same variables, a legal coset element with at most $7R$
+parities, we get $\ts\le7\,\Mbil(k)$, where $\Mbil(k)$ is the bilinear complexity over $\F$ of multiplying two
+polynomials of degree $<k$. This is $O(k^{\log_23})$ by Karatsuba. It is $O(k)$ because the product has
+degree $\le2k-2$ and is therefore determined by its residue modulo an irreducible polynomial of degree $2k-1$, so
+$\Mbil(k)\le\mu_2(2k-1)$, the bilinear complexity of multiplication in $\mathrm{GF}(2^{2k-1})$, which is linear by
+Chudnovsky-type constructions \cite{KGP26b,CC88}. Hence $\ts(\text{multiplier})=\Theta(k)$.
+\end{corollary}
+
+\begin{remark}\label{rem:general}
+The proof uses only that each slot-contraction of the tensor pins one coordinate:
+any ``grouped products'' structure $x_iy_jz_{\pi(i,j)}$ with $\pi$ surjective and slot-injective has $\ds=\#x+
+\#y+\#\text{classes}$. Convolution-type arithmetic (polynomial multiplication, carry-free multiplier
+layers) falls in this class, which is why this family occurs in real benchmark suites rather than
+only in constructions.
+\end{remark}
+
+Two consequences limit what the multiplier family shows. First, by Corollary~\ref{cor:gf}(a) the coset
+minimization gains nothing on multipliers: $2^{4k-1}$ is the cost of enumerating the raw parity span.
+Second, by Corollary~\ref{cor:gf}(c) the rank price $2^{4k-1}$ and the
+\emph{optimal} weight price $2^{0.396\ts}$ with $\ts=\Theta(k)$ differ only in the constants of the exponent.
+If $\Mbil(k)\le1.44k$ then $0.396\,\ts\le0.396\cdot7\,\Mbil(k)\le4k$ and the optimal weight price is no larger
+than the rank price up to a constant factor. The converse does not follow, because $7\,\Mbil(k)$ is only an upper bound on $\ts$:
+at $k=2$, $\Mbil=3$ and $7\,\Mbil=21$, while the raw pattern already has $18$ parities.
+All known constructions have $\Mbil(k)>1.44k$. The provable
+superpolynomial separation lives on generic families, next.
+
+\section{Separation on generic dense cores}\label{sec:sep}
+
+\begin{theorem}\label{thm:sep}
+For all but a vanishing fraction of the $2^{f(d)}$ Clifford classes of phase functions on $d$ variables,
+$\ds=d$ and $\ts=\Theta(d^2)$; hence the rank price is $2^{\ds}=2^{\Theta(\sqrt{\ts})}$ against
+an optimal weight price of $2^{0.396\ts}$, a superpolynomial separation in $\ts$.
+\end{theorem}
+\begin{proof}
+Full core. By Corollary~\ref{cor:core}, a class with $\ds<d$ has its core inside one of the $2^d-1$ hyperplanes $H$,
+that is $P\in W_H$, and $|W_H|=2^{f(d-1)}$ by Corollary~\ref{cor:dim}. The fraction of such classes is at most
+\[
+  \frac{(2^d-1)\,2^{f(d-1)}}{2^{f(d)}}\;=\;\frac{2^d-1}{2^{\,1+(d-1)+\binom{d-1}2}}\;<\;2^{-\binom{d-1}2}.
+\]
+(The exact count follows from the unique core: with $g(j)$ the number of full-core classes on $j$ variables,
+$2^{f(d)}=\sum_j\binom dj_{\!2}\,g(j)$; at $d=4$ this gives $1536$ non-full classes of $16384$, matching exhaustive enumeration.)
+Lower bound on $\ts$ by counting: there are $2^{f(d)}$ classes, while
+representations with $t$ odd parities number at most $2^{t(d+3)}$; so for most classes $\ts\ge
+f(d)/(d+3)\sim d^2/6$. Upper bound $\ts\le\binom{d+1}2+1$ by \cite[Thm.~3]{Van24}.
+Measured exact optima (coset scans
+to $2^{22}$ codewords): median $\ts=3,7,11.5$ at $d=4,5,6$.
+\end{proof}
+
+\begin{scope}
+On $d$ variables $\ds\le d$ always, so in this family the rank price $2^{d}$ equals the cost of enumerating
+all path variables directly. The theorem separates that cost from the stabilizer-rank bar $2^{0.396\ts}$; it
+does not show an advantage of coset minimization over direct enumeration. That advantage appears when $\ds<\rho$, as
+on $26$ of the $40$ benchmark circuits below.
+\end{scope}
+
+\section{Benchmarks and a wall-clock duel}\label{sec:bench}
+
+\paragraph{Suite.} Over the 45-circuit \code{feynman} \code{.qc} suite (inputs symbolic; Toffoli via $H\cdot\mathrm{CCZ}\cdot H$; $\ds$ by
+Theorem~\ref{thm:poly}), 40 circuits computed: the rank price $2^{\ds}$ beats the generic weight bar $2^{0.396t}$
+on 33/40. The seven losses are \code{barenco\_tof\_3}, \code{barenco\_tof\_5}, \code{barenco\_tof\_10},
+\code{tof\_3}, \code{csum\_mux\_9}, \code{mod5\_4} and \code{qft\_4}; Table~\ref{tab:bench} shows a representative slice. The coset
+optimization of Theorem~\ref{thm:poly} reduced $\ds$ strictly below the raw parity rank on 26/40 circuits; with the raw
+rank $\rho$ in place of $\ds$ the count of wins is 23/40.
+We emphasize the bar is the \emph{generic} exponent: structured decomposers (below) can do better.
+The values are those of the extracted phase polynomial (see the scope remark after Theorem~\ref{thm:sim}).
+
+\begin{table}[ht]
+\centering
+\caption{Representative benchmark rows (full data in the repository). $t$ is the post-\code{full\_reduce}
+$T$-count where \code{pyzx} parses the circuit, else the raw parity count; $\rho$ the raw
+odd-parity rank; $\ds$ by Theorem~\ref{thm:poly}. Rank wins iff $\ds<0.396\,t$. Rows marked $\dagger$ differ
+from version~1 (Appendix~\ref{app:changes}).}\label{tab:bench}
+\smallskip
+\begin{tabular}{lrrrrl}
+\toprule
+circuit & $t$ & $\rho$ & $\ds$ & $0.396\,t$ & verdict\\
+\midrule
+\code{gf2\textasciicircum10\_mult} & 410 & 39 & 39 & 162.4 & rank\\
+\code{gf2\textasciicircum32\_mult} & 4128 & 127 & 127 & 1634.7 & rank\\
+\code{gf2\textasciicircum256\_mult} & 262400 & 1023 & 1023 & 103910 & rank\\
+\code{mod\_mult\_55} & 35 & 12 & 8 & 13.9 & rank\\
+\code{adder\_8}$^{\dagger}$ & 173 & 72 & 55 & 68.5 & rank\\
+\code{qcla\_adder\_10} & 162 & 60 & 50 & 64.2 & rank\\
+\code{ham15-high}$^{\dagger}$ & 1565 & 526 & 370 & 619.7 & rank\\
+\code{grover\_5}$^{\dagger}$ & 216 & 104 & 84 & 85.5 & rank\\
+\code{qft\_4}$^{\dagger}$ & 67 & 43 & 41 & 26.5 & weight\\
+\code{barenco\_tof\_10}$^{\dagger}$ & 100 & 50 & 41 & 39.6 & weight\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Duel.} Task with closed-form truth: $A=\langle+^{2k},c_0{=}1|\,C_k\,|+^{2k},0\rangle=(2^k-1)/4^k$, which counts
+multiplicative pairs by amplitude. Our engine (exact $\Z[\omega_8]$, constraint substitution, $\rho=4k-1$
+residual enumeration with exact $\Z_4$ Gauss sums; Theorem~\ref{thm:sim}) against \code{quizx}'s cat-state decomposer
+\cite{KvdW21,KvdWV22}; see Table~\ref{tab:duel}. On this family $\ds=\rho$, so the duel measures enumeration of the raw
+parity span.
+
+\begin{table}[ht]
+\centering
+\caption{Wall-clock duel on the counting task $A=\langle+^{2k},c_0{=}1|C_k|+^{2k},0\rangle=(2^k-1)/4^k$. Both
+engines returned identical exact scalars at every point; wrong-bra controls returned exactly $0$.
+The Python column's per-$k$ ratio measured $15.5\times$ against the provable $16\times$; \code{quizx}'s measured
+ratios accelerate ($27,52,65\times$). The Rust port of Theorem~\ref{thm:sim} wins from $k=5$ and reaches $k=9$;
+the $T$-count-driven method's own measured curve prices $k=8$ at $\gtrsim74$ hours.}\label{tab:duel}
+\smallskip
+\begin{tabular}{rrrrl}
+\toprule
+$k$ & \code{quizx} (Rust, 4 thr) & ours (Python) & ours (Rust) & exact answer\\
+\midrule
+4 & 0.03\,s & 2.0\,s & 0.002\,s & $15/256$\\
+5 & 0.88\,s & 48\,s & 0.028\,s & $31/1024$\\
+6 & 45.5\,s & 2119\,s & 0.63\,s & $63/4096$\\
+7 & 2970\,s & 32874\,s & 29.1\,s & $127/16384$\\
+8 & (unreached; $\gtrsim74$\,h extrap.) & -- & 460\,s & $255/65536$\\
+9 & (unreached) & -- & 7910\,s & $511/262144$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The $T$-count-driven ratio \emph{accelerates} ($t$ grows quadratically in $k$ for the fixed realization;
+the cat driver's effective $\alpha\approx0.1$ is far below the generic $0.396$); ours is a provable flat $16\times$ per
+$k$. At equal implementation language (the measured interpreter handicap is $\sim500\times$ per state)
+the crossover is $k\approx5$; Python-versus-Rust it is $k\approx9$. A robustness probe (re-expressing each
+CCZ as seven $T$ gadgets, same unitary) slowed \code{quizx} only $3$--$6\times$ (its simplifier re-fuses the
+gadgets), while $\ds$ is unchanged, since the re-expression stays inside the coset. Independent of constants, $\ds$ \emph{forecasts} the cost
+of the enumeration method in polynomial time before anything runs; decomposition heuristics provide no forecast.
+
+\section{Related work}\label{sec:related}
+
+Path-sum representations and Clifford elimination are classical \cite{DHH05,dBDKR08,Amy19};
+``reduce, then enumerate the residual'' appears in \cite{Amy19} and, at the mod-$2$ level with a
+variable-minimizing linear map, as Montanaro's Corollary~15 \cite{Mon17}; the twisted Clifford quotient
+is what separates $\ds$ from that line (Section~\ref{sec:alg}). The weight objective and its Reed--Muller
+decoding view are due to Amy--Mosca \cite{AM19}, with TODD \cite{HC19}, TOHPE/FastTODD
+\cite{Van24}, spider nests \cite{dBBW20}, and phase teleportation \cite{KvdW20} all minimizing counts;
+exact $T$-count is NP-hard \cite{vdWA23}. Khoruzhii, Gel{\ss} and Pokutta \cite{KGP26b} minimize count-type
+tensor ranks (CP/Waring) of the same cubic invariant on the same multiplier family; theirs
+is the closest program to ours, and the source of the bilinear coset moves in Corollary~\ref{cor:gf}(c).
+Brier--Langevin's effective dimension of cubic forms \cite{BL03,KGP26a} preempts the top-grade
+layer of Theorem~\ref{thm:poly}. Simulation costs shaped like $2^{\mathrm{GF}(2)\text{-dimension}}$ appear as circuit-trace
+quantities in CAMPS \cite{LC26} and Clifft \cite{CL26a}, without coset minimization. Stabilizer-rank simulation and its exponents are in
+\cite{BG16,BBC19,QPG21,KvdW22,KvdWV22}; hardness context in \cite{vdWA23,HNS20,JVdN14,Mon17}; mod-$8$ cubic phases in
+higher-order Fourier analysis in \cite{Lab22}. Our literature search found no prior formulation of the rank objective, the canonical
+core, the polynomial-time coset-rank algorithm, or the $4k-1$ law.
+
+\section{Open problems}
+
+(1) Close the multiplier window: is $0.396\,\ts\gtrless4k-1$ at the coset optimum? Either answer is a sharp theorem.
+(2) $\ds$ versus focused rank-width \cite{CL26b}: which dominates? (3) The doubled (ket/bra) invariant for probabilities
+and sampling: does structure cancel below $2\ds$? (4) Level~4 of the hierarchy ($\sqrt T$): the grading
+becomes quartic; does the syndrome/core machinery lift? (5) An operator-level invariant: extend the minimization to
+path-sum rewrites that change the number of variables (the Hadamard rule, nonlinear substitution), and prove a
+lower bound on simulation cost.
+
+\section*{Acknowledgments}
+
+The derivations, implementations, literature analysis, and drafting in this work were carried out
+with substantial assistance from an AI system (Anthropic's Claude); all mathematical claims
+were verified mechanically as described in Appendix~\ref{app:manifest}, and all errors remain the author's own.
+
+\appendix
+
+\section{Machine-verification manifest}\label{app:manifest}
+
+All code at \href{https://github.com/0verflowme/rankprice}{\code{github.com/0verflowme/rankprice}} (Python~3.9, standard library; exact
+arithmetic throughout; \code{pyzx}~0.10 and \code{quizx} for cross-checks).
+\begin{itemize}[leftmargin=*]
+\item \textbf{Grading iso}: exhaustive at $h=3$ ($8^7$ vectors; $8^3\cdot4^3\cdot2$ classes; kernel constant on the
+grading). Null identities and constructive relation lifts: $h\le6$.
+\item \textbf{Lemmas~\ref{lem:syndrome}--\ref{lem:dual}}: coefficient-vs-count identity on random patterns $h\le6$; the vectors $Q(y)$
+span a space of dimension $f(h)$, so $\dim\ker\Phi=\dim\RM(h-4,h)^{*}$, for $h=4,\dots,7$; random codewords have zero syndrome.
+\item \textbf{Proposition~\ref{prop:hier}}: $\ts(\mathrm{CCZ})=7$ and $\ds(\mathrm{CCZ})=3$ by coset scans at $h=4,5,6$ ($2^{22}$ codewords at $h=6$);
+syndromes of the $7$- and $4$-parity patterns differ.
+\item \textbf{Scope remark}: $\ds=2$ for $T\,H\,H\,T^{\dagger}$ and $\ds=3$ for $\mathrm{Toffoli}\cdot\mathrm{Toffoli}$; both unitaries equal the identity numerically.
+\item \textbf{Theorem~\ref{thm:indep}}: 45 random configurations; the maximal-monomial witness evaluated to $1$ in
+every case. \textbf{Lemma~\ref{lem:reduce}}: all $4$- and $5$-fold reductions verified. \textbf{Theorem~\ref{thm:intersect}}: $60/60$ exact-dimension
+checks ($h=5,6$).
+\item \textbf{Theorem~\ref{thm:poly}}: $142/142$ agreement with brute-force coset scans (120 random; 20 planted-and-scrambled;
+2 exhaustive 4.2M-codeword scans at $h=6$); scaling to $h=128$, 17{,}232 gadgets. The rotation into span coordinates
+preserves $\ds$ on 240 random patterns.
+\item \textbf{Theorem~\ref{thm:gf}}: premises verified per benchmark file ($k\le16$); idealized model exact for
+$k=3,\dots,12$; $\ds=4k-1$ measured for all twelve $k\in\{4,\dots,10,16,32,64,128,256\}$. \textbf{Corollary~\ref{cor:gf}(c)}: at $k=2$ the raw
+and Karatsuba patterns ($18$ and $21$ parities) have the same syndrome.
+\item \textbf{Theorem~\ref{thm:sep}}: exhaustive count at $d=4$ ($1536/16384$ non-full) equals the recursion; samples at $d=5,6$ agree.
+\item \textbf{Theorem~\ref{thm:sim} / Section~\ref{sec:bench}}: amplitudes equal brute force in exact $\Z[\omega_8]$; both engines agree
+with the closed form at every $k$; wrong-bra controls exactly $0$; Gauss-sum eliminator
+validated on 320 random forms. Benchmark table recomputed from the \code{.qc} files.
+\end{itemize}
+The checks added in version~2 are in \code{research/review\_checks.py}.
+
+\section{Changes from version 1}\label{app:changes}
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Benchmark table.} A coordinate bug in the benchmark script (the rotation of masks into span coordinates was
+not linear) overstated $\ds$ on 24 of the 40 computed circuits. Corrected counts: $\ds<\rho$ on 26/40 (was 13/40); rank beats
+$0.396\,t$ on 33/40 (was 25/40). All multiplier rows are unchanged. Theorems and the $142/142$ validation did not depend on the bug.
+\item \textbf{Proposition~\ref{prop:hier}.} Version~1 cited Selinger's $7\to4$ reduction as lowering the weight of the CCZ pattern inside its coset.
+That gate is $\mathrm{CCZ}\cdot\mathrm{CS}^{\dagger}$ and lies in a different coset; $\ts(\mathrm{CCZ})=7$. The CCZ pattern itself now witnesses the left end.
+\item \textbf{Scope of the invariant.} ``Operator-invariant price'' is replaced by invariance under coset moves on fixed path variables, with
+two identity circuits as examples. Theorem~\ref{thm:sim} is stated as an upper bound and its proof is written out.
+\item \textbf{Theorem~\ref{thm:sep}.} The claim that generic classes have full core now has a counting proof and an exact count. A scope remark
+notes that $2^{\ds}=2^d$ equals direct enumeration in this family.
+\item \textbf{Corollary~\ref{cor:gf}(c).} The reduction from polynomial multiplication to field multiplication in $\mathrm{GF}(2^{2k-1})$ is stated. The
+criterion ``rank wins iff $\Mbil(k)>1.44k$'' is corrected to a one-way implication.
+\item \textbf{Minor.} The verification of $\ker\Phi$ at $h=5$ is replaced by a rank computation; open problem~(5) is replaced, since the Rust
+implementation exists (Table~\ref{tab:duel}); the description of the literature search is shortened.
+\end{enumerate}
+
+\begin{thebibliography}{KvdWV22}\small
+
+\bibitem[AM19]{AM19} Matthew Amy and Michele Mosca. $T$-count optimization and Reed--Muller codes. \emph{IEEE Transactions on Information Theory}, 65(8):4771--4784, 2019. arXiv:1601.07363.
+
+\bibitem[Amy19]{Amy19} Matthew Amy. Towards large-scale functional verification of universal quantum circuits. In \emph{Quantum Physics and Logic (QPL 2018)}, volume 287 of \emph{EPTCS}, pages 1--21, 2019. arXiv:1805.06908.
+
+\bibitem[BBC$^{+}$19]{BBC19} Sergey Bravyi, Dan Browne, Padraic Calpin, Earl Campbell, David Gosset, and Mark Howard. Simulation of quantum circuits by low-rank stabilizer decompositions. \emph{Quantum}, 3:181, 2019. arXiv:1808.00128.
+
+\bibitem[BG16]{BG16} Sergey Bravyi and David Gosset. Improved classical simulation of quantum circuits dominated by Clifford gates. \emph{Physical Review Letters}, 116:250501, 2016. arXiv:1601.07601.
+
+\bibitem[BL03]{BL03} Eric Brier and Philippe Langevin. Classification of Boolean cubic forms of nine variables. \emph{IEEE Information Theory Workshop}, 2003.
+
+\bibitem[Car06]{Car06} Enrico Carlini. Reducing the number of variables of a polynomial. In \emph{Algebraic Geometry and Geometric Modeling}, pages 237--247. Springer, 2006.
+
+\bibitem[CC88]{CC88} David V. Chudnovsky and Gregory V. Chudnovsky. Algebraic complexities and algebraic curves over finite fields. \emph{Journal of Complexity}, 4(4):285--316, 1988.
+
+\bibitem[CL26a]{CL26a} Bradley A. Chase and Farrokh Labib. Clifft: fast exact simulation of near-Clifford quantum circuits, 2026. arXiv:2604.27058.
+
+\bibitem[CL26b]{CL26b} Julien Codsi and Tuomas Laakkonen. Unifying graph measures and stabilizer decompositions for the classical simulation of quantum circuits. 2026. arXiv:2603.06377.
+
+\bibitem[dBBW20]{dBBW20} Niel de Beaudrap, Xiaoning Bian, and Quanlong Wang. Fast and effective techniques for $T$-count reduction via spider nest identities. In \emph{Theory of Quantum Computation, Communication, and Cryptography (TQC 2020)}, volume 158 of \emph{LIPIcs}, pages 11:1--11:23, 2020. arXiv:2004.05164.
+
+\bibitem[dBDKR08]{dBDKR08} Niel de Beaudrap, Vincent Danos, Elham Kashefi, and Martin Roetteler. Quadratic form expansions for unitaries. In \emph{Theory of Quantum Computation, Communication, and Cryptography (TQC 2008)}, volume 5106 of \emph{LNCS}, pages 29--46, 2008. arXiv:0801.2461.
+
+\bibitem[DHH$^{+}$05]{DHH05} Christopher M. Dawson, Henry L. Haselgrove, Andrew P. Hines, Duncan Mortimer, Michael A. Nielsen, and Tobias J. Osborne. Quantum computing and polynomial equations over the finite field $\Z_2$. \emph{Quantum Information and Computation}, 5(2):102--112, 2005. arXiv:quant-ph/0408129.
+
+\bibitem[HC19]{HC19} Luke E. Heyfron and Earl T. Campbell. An efficient quantum compiler that reduces $T$ count. \emph{Quantum Science and Technology}, 4:015004, 2019. arXiv:1712.01557.
+
+\bibitem[HNS20]{HNS20} Cupjin Huang, Michael Newman, and Mario Szegedy. Explicit lower bounds on strong quantum simulation. \emph{IEEE Transactions on Information Theory}, 66(9):5585--5600, 2020. arXiv:1902.04764.
+
+\bibitem[JVdN14]{JVdN14} Richard Jozsa and Maarten Van den Nest. Classical simulation complexity of extended Clifford circuits. \emph{Quantum Information and Computation}, 14(7--8):633--648, 2014. arXiv:1305.6190.
+
+\bibitem[Kay11]{Kay11} Neeraj Kayal. Efficient algorithms for some special cases of the polynomial equivalence problem. In \emph{Proceedings of the 22nd ACM-SIAM Symposium on Discrete Algorithms (SODA)}, pages 1409--1421, 2011.
+
+\bibitem[KGP26a]{KGP26a} Kirill Khoruzhii, Patrick Gel{\ss}, and Sebastian Pokutta. Classification of Boolean cubic forms in ten variables, 2026. arXiv:2606.28473.
+
+\bibitem[KGP26b]{KGP26b} Kirill Khoruzhii, Patrick Gel{\ss}, and Sebastian Pokutta. Tensor decomposition for non-Clifford gate minimization. 2026. arXiv:2602.15285.
+
+\bibitem[KvdW20]{KvdW20} Aleks Kissinger and John van de Wetering. Reducing $T$-count with the ZX-calculus. \emph{Physical Review A}, 102:022406, 2020. arXiv:1903.10477.
+
+\bibitem[KvdW21]{KvdW21} Aleks Kissinger and John van de Wetering. quizx: a Rust library for ZX-calculus circuit rewriting. \url{https://github.com/zxcalc/quizx}, 2021.
+
+\bibitem[KvdW22]{KvdW22} Aleks Kissinger and John van de Wetering. Simulating quantum circuits with ZX-calculus reduced stabiliser decompositions. \emph{Quantum Science and Technology}, 7:044001, 2022. arXiv:2109.01076.
+
+\bibitem[KvdWV22]{KvdWV22} Aleks Kissinger, John van de Wetering, and Renaud Vilmart. Classical simulation of quantum circuits with partial and graphical stabiliser decompositions. In \emph{Theory of Quantum Computation, Communication, and Cryptography (TQC 2022)}, volume 232 of \emph{LIPIcs}, pages 5:1--5:13, 2022. arXiv:2202.09202.
+
+\bibitem[Lab22]{Lab22} Farrokh Labib. Stabilizer rank and higher-order Fourier analysis. \emph{Quantum}, 6:645, 2022. arXiv:2107.10551.
+
+\bibitem[LC26]{LC26} Zejun Liu and Bryan K. Clark. Simulating quantum circuits with Clifford-augmented matrix product states. \emph{Physical Review Research}, 2026. arXiv:2412.17209.
+
+\bibitem[Mon17]{Mon17} Ashley Montanaro. Quantum circuits and low-degree polynomials over $\mathbb{F}_2$. \emph{Journal of Physics A: Mathematical and Theoretical}, 50:084002, 2017. arXiv:1607.08473.
+
+\bibitem[MS77]{MS77} F. Jessie MacWilliams and Neil J. A. Sloane. \emph{The Theory of Error-Correcting Codes}. North-Holland, 1977.
+
+\bibitem[QPG21]{QPG21} Hammam Qassim, Hakop Pashayan, and David Gosset. Improved upper bounds on the stabilizer rank of magic states. \emph{Quantum}, 5:606, 2021. arXiv:2106.07740.
+
+\bibitem[Sel13]{Sel13} Peter Selinger. Quantum circuits of $T$-depth one. \emph{Physical Review A}, 87:042302, 2013. arXiv:1210.0974.
+
+\bibitem[Van24]{Van24} Vivien Vandaele. Lower $T$-count with faster algorithms. 2024. arXiv:2407.08695.
+
+\bibitem[vdWA23]{vdWA23} John van de Wetering and Matthew Amy. Optimising $T$-count is NP-hard. 2023. arXiv:2310.05958.
+
+\end{thebibliography}
+\end{document}
