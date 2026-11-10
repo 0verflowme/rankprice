@@ -15,4 +15,5 @@ and equal to the closed form; wrong-bra controls returned exactly 0.
 
 Presentation-robustness probe: re-expressing each CCZ as its 7-T gadget
 pattern (same unitary) slowed quizx 3-6x (its simplifier re-fuses gadgets);
-delta* is representation-invariant by construction.
+delta* is invariant under re-expression inside the Clifford coset
+(fixed path variables; see docs/proofs.md, correction C3).

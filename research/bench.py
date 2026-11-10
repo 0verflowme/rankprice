@@ -123,10 +123,13 @@ def basis_reduce_track(masks):
                 pv, pcv = piv[b]
                 cur ^= pv; cvec ^= pcv
             else:
+                # new basis vector e_idx := m (the original mask), so
+                # m has coordinates 1<<idx and the reduced vector cur
+                # has coordinates cvec ^ (1<<idx).
                 idx = len(order)
                 piv[b] = (cur, cvec | (1 << idx))
                 order.append(b)
-                cvec = cvec | (1 << idx)
+                cvec = 1 << idx
                 break
         coords.append(cvec)
     return len(order), coords
@@ -206,6 +209,17 @@ def selftest():
             fast = MP_rank_fast(masks, rho)
             assert slow == fast, (rho, masks, slow, fast)
     print("selftest: fast M_P == reference on 120 cases. OK")
+    # the rotation must be linear: delta* in rho coordinates has to equal
+    # delta* in the original coordinates (this caught a coordinate bug)
+    for h in (4,6,9,12):
+        for _ in range(30):
+            masks = list({random.randrange(1, 1 << h)
+                          for _ in range(random.randrange(1, 3*h))})
+            rho, coords = basis_reduce_track(masks)
+            assert MP_rank_fast(coords, rho) == \
+                MP_rank(cubic_of_masks(masks, h), h), (h, masks)
+    print("selftest: rotated delta* == original-coordinate delta* "
+          "on 120 cases. OK")
 
 # ---------- pyzx column ----------
 

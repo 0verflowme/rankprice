@@ -354,3 +354,127 @@ swept; several load-bearing sources are 2026 preprints; Labib appears on
 both the HOFA and Clifft teams, so convergence on span-dimension invariants
 from that direction is live. Re-run a targeted arXiv check immediately
 before posting.
+
+
+---
+
+# Corrections after an independent review (pass 4)
+
+Every item below has a machine check in `research/review_checks.py`
+(blocks R1 to R7). The paper PDF on Zenodo (v1) still carries the old text.
+
+## C1. Code bug: the benchmark delta* column was overstated
+
+`basis_reduce_track` in `research/bench.py` returned the coordinates of the
+reduced vector for each pivot mask. The pivot mask itself needs the
+coordinates `1 << idx`. The returned map was therefore not linear, and
+`MP_rank_fast` ran on a pattern outside the GL orbit of the circuit pattern.
+
+Fix: one line. Check R7 confirms rotated delta* equals delta* in the original
+coordinates on 240 random patterns. `bench.py` selftest now runs the same test.
+
+Effect on `research/benchmarks/results.csv` (t_raw and rho are unchanged):
+
+- delta* changed on 24 of the 40 computed circuits. Every change is a decrease.
+- All 12 gf2^k_mult rows are unchanged: delta* = rho = 4k - 1.
+- delta* < rho on 26 of 40 circuits (the paper says 13).
+- Rank beats the generic bar 0.396 t on 33 of 40 circuits (the paper says 25).
+- Weight still wins on barenco_tof_3, barenco_tof_5, barenco_tof_10,
+  csum_mux_9, mod5_4, qft_4 and tof_3.
+
+Corrected rows of the paper's Table 1:
+
+    circuit          t     rho   delta* (paper)   delta* (fixed)   0.396 t   verdict
+    adder_8          173    72        60               55            68.5    rank
+    ham15-high      1565   526       455              370           619.7    rank
+    grover_5         216   104       104               84            85.5    rank (was weight)
+    qft_4             67    43        42               41            26.5    weight
+    barenco_tof_10   100    50        50               41            39.6    weight
+    mod_mult_55, qcla_adder_10 and the gf2 rows: unchanged
+
+Theorem 10, the 142/142 brute-force agreement (`delta_poly.py`), the 4k-1 law
+(`gf_law.py`) and the amplitude engine (`wallclock.py`) do not use the
+rotated coordinates for any validated quantity. All were rerun after the fix.
+
+## C2. Hierarchy proposition: the Selinger example is wrong
+
+The paper says Selinger's 7 -> 4 reduction lowers the weight of the CCZ
+pattern while the rank stays 3. That move leaves the coset.
+
+- The 7-parity pattern has phase 4xyz. Its syndrome is xyz.
+- Selinger's 4-parity pattern {z, x+z, y+z, x+y+z} has phase 4xyz - 2xy.
+  That is CCZ times CS-dagger. Its syndrome is xyz + xy.
+- CS is not Clifford (CS X CS^dagger is not a Pauli).
+- Inside the CCZ coset t* = 7 for every h: nonzero codewords of RM(h-4,h)*
+  have weight >= 15, so |c + w| >= 15 - 7 = 8. Coset scans at h = 4, 5, 6
+  (2^22 codewords at h = 6) return t* = 7 and delta* = 3.
+
+Replacement example for "the left end is achieved": CCZ itself, with
+t* = 7 = 2^3 - 1 and delta* = 3. (Check R1.)
+
+## C3. delta* is an invariant of the phase polynomial, not of the operator
+
+The coset moves keep the h path variables fixed. Path-sum rewrites that
+change h (the Hadamard rule sum_y (-1)^{y(u+v)} = 2[u = v], nonlinear
+substitution) are outside the model. Two circuits for the identity operator:
+
+    T H H T^dagger      3 path variables, rho = 2, delta* = 2
+    Toffoli Toffoli     7 path variables, rho = 4, delta* = 3
+
+Both have exact cost 1. So:
+
+- "operator-invariant price" should read "invariant of the phase polynomial
+  under Clifford coset moves on a fixed variable set";
+- 2^{delta*} is an upper bound on exact simulation cost. No lower bound is
+  proved, so "what exact simulation actually pays" is too strong;
+- `research/benchmarks/timings.md` "representation-invariant" has the same
+  scope: invariant under re-expression inside the coset. (Check R2.)
+
+## C4. Separation theorem (generic dense cores)
+
+(a) Proof gap. "delta* = d for generic classes" was supported by one random
+instance. Proof: a class with delta* < d has its core inside one of the
+2^d - 1 hyperplanes, and each hyperplane carries 2^{f(d-1)} classes, so the
+fraction is at most (2^d - 1) / 2^{1 + (d-1) + C(d-1,2)} < 2^{-C(d-1,2)}.
+The exact count follows from Corollary 7: with g(j) the number of full-core
+classes on j variables, 2^{f(d)} = sum_j [d choose j]_2 g(j). At d = 4 this
+gives 1536 non-full classes of 16384, equal to the exhaustive count.
+(Check R4.)
+
+(b) Scope. On d variables delta* <= d always, so in this family the rank
+price 2^{delta*} = 2^d equals the cost of enumerating all d path variables.
+The separation compares that cost with the stabilizer-rank bar 2^{0.396 t*}.
+It does not show an advantage over direct path enumeration.
+
+## C5. Multipliers: delta* = rho, and the 7 M_bil bound
+
+(a) On every multiplier delta* = rho (Corollary 13a). The enumeration in the
+wall-clock duel therefore runs over the raw parity span. The coset
+minimization changes the cost only on circuits with delta* < rho.
+
+(b) t* <= 7 M_bil(k) is an upper bound. At k = 2: M_bil = 3 (the z-flattening
+has rank 3 and Karatsuba attains it), so 7 M_bil = 21, yet the raw pattern
+has 18 parities in the same coset. Hence "rank wins iff M_bil(k) > 1.44k"
+holds in one direction only: M_bil(k) <= 1.44k implies the weight exponent
+0.396 t* is at most about 4k. (Check R6.)
+
+(c) The invariant is the unreduced convolution tensor (polynomial
+multiplication, 2k - 1 output classes). Chudnovsky-Chudnovsky bounds concern
+multiplication in GF(2^n). The O(k) claim needs one extra sentence: a product
+of two polynomials of degree < k has degree <= 2k - 2, so it is determined by
+its residue modulo an irreducible of degree 2k - 1, giving
+M_bil(k) <= mu_2(2k - 1) = O(k).
+
+## C6. Kernel check at h = 5 was vacuous
+
+`lemma_check.py` step B samples random patterns and keeps those with zero
+syndrome. At h = 5 it finds none. Replacement check: the vectors Q(y),
+y != 0, span a space of dimension f(h), so dim ker Phi = 2^h - 1 - f(h)
+= dim RM(h-4,h)*. With the inclusion RM* <= ker (step B, 200 codewords) the
+two are equal. Verified for h = 4, 5, 6, 7. (Check R3.)
+
+## Unchanged
+
+Lemmas 1, 2, 4, 8, 9, Theorems 3, 6, 10, 12 and Corollaries 5, 7, 11 stand
+as written. `lemma_check.py`, `delta_poly.py` (120 + 20 + 2 agreements),
+`gf_law.py` and `wallclock.py 4` all pass after the fix.
